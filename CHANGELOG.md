@@ -1,5 +1,7 @@
 # Flex Mobile Routing app - Changelog
 
+## v0.3.0 (Feb 2013)
+- Many UX optimizations
 
 ## Fixes in v0.2.1 (August 2012):
 - added skinClass to route directions to and from fields. This fixed a bug when you dragged the container
