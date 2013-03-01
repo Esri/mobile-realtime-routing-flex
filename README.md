@@ -4,7 +4,7 @@ This is a prototype mapping application that demonstrates using real-time routin
 
 Main View:
 
-![App](https://raw.github.com/Esri/flex-mobile-routing/master/flex_mobilerouting_main_view.png)
+![App](https://raw.github.com/andygup/flex-mobile-routing/master/flex_mobilerouting_main_view.png)
 
 ## Features
 * Real-time Mapping and GPS.
@@ -20,7 +20,7 @@ Main View:
 * Mapping Library - Installation instructions here: [ArcGIS API for Flex](http://resources.arcgis.com/en/communities/flex-api/)
 * Experience with Flex/ActionScript software development
 
-Click [here](http://resources.arcgis.com/en/help/android-sdk/concepts/0119/01190000002m000000.htm) for more information on installing the mapping library.
+Click [here](http://resources.arcgis.com/en/help/android-sdk/concepts/0119/01190000002m000000.htmhttp://resources.arcgis.com/en/help/flex-api/concepts/index.html#//017p0000001q000000#GUID-7DBBCE1F-0DDD-489D-9FE4-CF833B7FBC6C) for more information on installing the mapping library.
 
 ## Resources
 
