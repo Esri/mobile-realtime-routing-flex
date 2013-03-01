@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- http://blog.flexexamples.com/2010/06/25/fading-an-item-renderer-background-fill-on-a-spark-list-control-in-flex-4/ -->
+<s:ItemRenderer name="DirectionsItemRenderer"
+				xmlns:fx="http://ns.adobe.com/mxml/2009"
+				xmlns:s="library://ns.adobe.com/flex/spark"
+				xmlns:mx="library://ns.adobe.com/flex/mx"
+				creationComplete="directionsItemRenderer_creationCompleteHandler(event)"
+				autoDrawBackground="false">
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			
+			import events.MasterMsgEvent;
+			
+			import model.GPSDataModel;
+			
+			import mx.events.FlexEvent;
+			
+			public var _gpsDataModel:GPSDataModel;
+			
+			protected function labelDisplay_clickHandler(data:Object):void
+			{
+				trace("click");
+				_gpsDataModel.dispatchEvent(new MasterMsgEvent(MasterMsgEvent.ROUTETEXTSEGMENT_CLICK,data));	
+			}
+			
+			protected function directionsItemRenderer_creationCompleteHandler(event:FlexEvent):void
+			{
+				_gpsDataModel = GPSDataModel.getInstance();
+			}
+			
+		]]>
+	</fx:Script>
+	<s:states>
+		<s:State name="normal" />
+		<!--<s:State name="hovered" />-->
+		<s:State name="selected" />
+	</s:states>
+	
+	<s:Rect id="bgRect"
+			includeIn="normal,selected"
+			left="0" right="0" top="0" bottom="0" radiusX="10" radiusY="10">
+		<s:stroke>
+			<s:SolidColorStroke color="0xC0C0C0" weight="1.5"/>
+		</s:stroke>		
+		<s:fill>
+			<s:SolidColor color="0x336699"
+						  color.selected="0xCCCCCC" alpha="0.5"/>
+		</s:fill>
+	</s:Rect>
+	
+	<s:Label id="labelDisplay" text="{data}"
+			 left="5" right="5" top="5" bottom="10" click="labelDisplay_clickHandler(data)" />
+	
+</s:ItemRenderer>

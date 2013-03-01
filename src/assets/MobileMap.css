@@ -1,0 +1,74 @@
+/* CSS file */
+@namespace s "library://ns.adobe.com/flex/spark";
+
+/* MapView */
+#shutdownButton
+{
+	chromeColor: #FF0000;
+}
+
+#messageBox
+{
+	fontSize: 22; 
+	fontWeight: bold;	
+	bottom:0;				
+}
+
+#mapViewTitleLabel
+{
+	color: #000000;
+	fontWeight: normal;
+	fontSize: 30;
+	fontFamily: "Comic Sans MS";	
+}	
+
+#mapViewTitleWindow
+{
+	fontSize: 24;
+}
+
+#directionsTextArea
+{
+	fontSize: 22; 
+	fontWeight: bold;
+}
+
+/* SettingsView  */
+#settingsViewTitleLabel
+{
+	color: #000000;
+	fontWeight: normal;
+	fontSize: 30;
+	fontFamily: "Comic Sans MS";	
+}
+
+#shutdownGeolocationButton
+{
+	chromeColor: #FF0000;
+}
+
+/* Alert messages title window */
+#settingsViewTitleWindow
+{
+	fontSize: 24;
+}
+
+#addressTextArea
+{
+	fontSize: 22; 
+	fontWeight: bold;
+}
+
+#GPSTextArea
+{
+	fontSize: 22; 
+	fontWeight: bold;
+}
+
+s|TabbedViewNavigator #tabBar
+{
+	chromeColor: #C0C0C0;
+	color: 	#C0C0C0;
+	fontFamily: "Comic Sans MS";
+	fontSize: 24;		
+}

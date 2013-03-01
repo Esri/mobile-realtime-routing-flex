@@ -1,0 +1,334 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009"
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		xmlns:esri="http://www.esri.com/2008/ags"	
+		xmlns:controller="controller.*" 
+		backgroundColor="#281818" 
+		destructionPolicy="never" 
+		viewActivate="settingsViewActivateHandler(event)"
+		viewDeactivate="settingsViewDeactivateHandler(event)"
+		creationComplete="view_creationCompleteHandler(event)">
+
+	<fx:Style source="assets/MobileMap.css" />	
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.events.LocatorEvent;
+			import com.esri.ags.layers.GraphicsLayer;
+			import com.esri.ags.tasks.Locator;
+			import com.esri.ags.tasks.supportClasses.AddressCandidate;
+			
+			import controller.SettingsViewController;
+			
+			import events.MasterMsgEvent;
+			
+			import flash.sensors.Geolocation;
+			
+			import model.GPSDataModel;
+			
+			import mx.events.CloseEvent;
+			import mx.events.FlexEvent;
+			import mx.events.StateChangeEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			
+			import spark.components.Application;
+			import spark.components.ViewNavigator;
+			import spark.effects.Resize;
+			import spark.events.ViewNavigatorEvent;			
+
+			private var _gpsDataModel:GPSDataModel;		
+			private var _locator:Locator;	
+			private var _routeTextEnabled:Boolean = false;
+			[Bindable]private var _resizeEffect1:Resize;
+			[Bindable]private var _resizeEffect2:Resize;
+			[Bindable]private var _UI_DICTIONARY:Dictionary;	
+			private	const _SPEED_THRESHOLD:Number = 10; //mph
+			private const _LOCATOR_ENDPOINT:String = "http://tasks.arcgisonline.com/ArcGIS/rest/services/Locators/TA_Address_NA_10/GeocodeServer";												
+			
+			/**
+			 * This method runs when switching between views. 
+			 */
+			protected function settingsViewActivateHandler(event:ViewNavigatorEvent):void
+			{
+				trace("Settings View activated");
+				loadingHandler();
+				if(_gpsDataModel && _gpsDataModel.networkStatus == false)
+				{
+					_UI_DICTIONARY["networkService"] = true;				
+					settingsViewController.UIController(_UI_DICTIONARY);
+				}
+			}
+			
+			protected function settingsViewDeactivateHandler(event:ViewNavigatorEvent):void
+			{
+				trace("Settings View deactivated");
+				_gpsDataModel.removeEventListener(MasterMsgEvent.GPS_CHANGE,gpsDataChangeHandler);				
+			}			
+			
+			/**
+			 * This method will only be run when the application first loads.
+			 */
+			protected function view_creationCompleteHandler(event:FlexEvent):void
+			{
+				loadingHandler();
+				//Not currently used in the this app. Rotation disabled by default because of styling issues.
+				//To change this see MobileMap-app.xml.
+				//stage.addEventListener(StageOrientationEvent.ORIENTATION_CHANGE,stateChangeHandler);				
+			}
+						
+			private function loadingHandler():void
+			{
+				_UI_DICTIONARY = new Dictionary();
+
+				_locator = new Locator(_LOCATOR_ENDPOINT);
+				_locator.concurrency = "last";
+				
+				_locator.addEventListener(LocatorEvent.LOCATION_TO_ADDRESS_COMPLETE,locationCompleteHandler);
+				_locator.addEventListener(FaultEvent.FAULT,locationFaultHandler);
+				
+				_gpsDataModel = GPSDataModel.getInstance();
+				_gpsDataModel.addEventListener(MasterMsgEvent.GEOLOCATION,geolocationHandler);
+				
+				_UI_DICTIONARY["startViewSettings"] = true;
+				settingsViewController.UIController(_UI_DICTIONARY);
+				
+				if(_resizeEffect1 == null || _resizeEffect2 == null)
+				{
+					_UI_DICTIONARY["setResizeEffect"] = true;
+					settingsViewController.UIController(_UI_DICTIONARY);
+				}
+				
+				if(_gpsDataModel.currentMapPoint != null && _gpsDataModel.gpsActivated == true)
+				{
+					findCurrentLocation();
+					GPSTextArea.text = createGPSDataString();
+					
+					if(_gpsDataModel.streetAddress != null)
+					{
+						addressTextArea.text = _gpsDataModel.streetAddress;
+					}
+					else
+					{
+						addressTextArea.text = "No current location data is available.";
+					}					
+				}
+				else if(_gpsDataModel.streetAddress != null && _gpsDataModel.gpsActivated == false)
+				{					
+					addressTextArea.text = _gpsDataModel.streetAddress;
+					GPSTextArea.text = createGPSDataString();
+						
+					_UI_DICTIONARY["addressTextAreaVisible"] = true;
+					settingsViewController.UIController(_UI_DICTIONARY);
+					
+					_UI_DICTIONARY["gpsTextAreaVisible"] = true;
+					settingsViewController.UIController(_UI_DICTIONARY);					
+				}
+				else
+				{
+					GPSTextArea.text = "No GPS data available.";
+					addressTextArea.text = "No current location data is available.";					
+				}
+			}
+			
+			protected function stateChangeHandler(event:StageOrientationEvent):void
+			{
+				trace("state changed" + event.afterOrientation);
+			}
+			
+			protected function deleteCookieButton_clickHandler(event:MouseEvent):void
+			{								
+				_gpsDataModel.addEventListener(MasterMsgEvent.SHAREDOBJECT_DELETED,function(event:MasterMsgEvent):void{	
+					_UI_DICTIONARY["cookiesDeleted"] = true;
+					settingsViewController.UIController(_UI_DICTIONARY);
+				});
+
+				var dict:Dictionary = new Dictionary();
+				dict["Delete"] = true;
+				_gpsDataModel.dispatchEvent(new MasterMsgEvent(MasterMsgEvent.SHAREDOBJECT_CHANGE,dict));			
+			}
+			
+			protected function findLocation_clickHandler(event:MouseEvent):void
+			{							
+				findCurrentLocation();
+			}
+			
+			/**
+			 * Finds the approximate current location using reverse geocoding and Geolocation object params.
+			 * Locator only fires when speed is below _SPEED_TRESHOLD value.
+			 */
+			private function findCurrentLocation():void
+			{
+				trace("Spinning up geolocation...hang on just a minute.");	
+				_UI_DICTIONARY["addressTextAreaVisible"] = true;
+				settingsViewController.UIController(_UI_DICTIONARY);
+				
+				_UI_DICTIONARY["gpsTextAreaVisible"] = true;
+				settingsViewController.UIController(_UI_DICTIONARY);
+				
+				addressTextArea.text = "Attempting to get location data.";
+				GPSTextArea.text = "Retrieving GPS data...";
+				
+				if(_gpsDataModel.currentMapPoint != null && _gpsDataModel.GPSData.speed <= _SPEED_THRESHOLD)
+				{
+					_locator.locationToAddress(_gpsDataModel.currentMapPoint,200);		
+					GPSTextArea.text = createGPSDataString();
+				}
+				else
+				{
+					addressTextArea.text = "No current location data available.";
+				}
+				
+				_gpsDataModel.addEventListener(MasterMsgEvent.GPS_CHANGE,gpsDataChangeHandler);
+				_gpsDataModel.addEventListener(MasterMsgEvent.GPS_SUPPORTED,gpsSupportedHandler);
+				_gpsDataModel.dispatchEvent(new MasterMsgEvent(MasterMsgEvent.GEOLOCATION_CHANGE_REQUEST,"start"));
+				
+				_UI_DICTIONARY["startViewSettings"] = true;	
+				settingsViewController.UIController(_UI_DICTIONARY);
+			}
+			
+			private function gpsSupportedHandler(event:MasterMsgEvent):void
+			{
+				GPSTextArea.text = "NOTICE: GPS and/or location is not supported on your phone.";
+			}
+			
+			/**
+			 * Finds the approximate current location using reverse geocoding and Geolocation object params.
+			 * Locator only fires when speed is below _SPEED_TRESHOLD value.
+			 */			
+			private function gpsDataChangeHandler(event:MasterMsgEvent):void
+			{
+				if(_gpsDataModel.currentMapPoint != null  && _gpsDataModel.GPSData.speed <= _SPEED_THRESHOLD)
+				{
+					_locator.locationToAddress(_gpsDataModel.currentMapPoint,1000);
+				}
+				else
+				{
+					trace("gpsDataManager.currentMapPoint = null");
+				}
+				if(event.data != null)
+				{
+					GPSTextArea.text = createGPSDataString();
+				}
+			}
+			
+			private function locationCompleteHandler(event:LocatorEvent):void
+			{
+				var candidate:AddressCandidate = event.addressCandidate;
+				
+				if (candidate && candidate.address && candidate.address.Address)
+				{
+					var heading:String;
+					var address:Object = candidate.address;
+					trace("address " + address.Address);
+					
+					var addressText:String = address.Address + ", ";
+
+					if (address.City && address.State)
+					{
+						addressText += address.City + ", " + address.State;
+					}
+					
+					addressTextArea.text = addressText;	
+					//GPSTextArea.text = createGPSDataString();
+					
+					var dict:Dictionary = new Dictionary();
+					dict["address"] = addressText;
+					_gpsDataModel.dispatchEvent(new MasterMsgEvent(MasterMsgEvent.SHAREDOBJECT_CHANGE,dict));
+				}
+				else
+				{
+					addressTextArea.text = "No address found!";
+				}
+			}
+			
+			private function locationFaultHandler(event:FaultEvent):void
+			{
+				addressTextArea.text = "Can't get address: " + event.fault.name + "\n" + 
+					event.fault.faultCode + "\n" +
+					event.fault.faultDetail;
+			}
+			
+			private function createGPSDataString():String
+			{
+				var heading:String;
+				if(	_gpsDataModel.GPSData.heading.toString() == "NaN")
+				{
+					heading = "?";
+				}
+				else
+				{
+					heading = 	_gpsDataModel.GPSData.heading.toString();
+				}
+				
+				//Note: as of Sept 2011, heading information isn't available on Android.
+				var latlonText:String = "Latitude: " + _gpsDataModel.GPSData.lat.toString() + "\n"
+					+ "Longitude: " + _gpsDataModel.GPSData.lon.toString() + "\n"
+					//+ "Heading: " + heading + "\n"
+					+ "Altitude: " + (_gpsDataModel.GPSData.horizontalAccuracy * 3.280839895 ).toFixed(2) + " ft.\n"
+					+ "Horizontal Accuracy: " + (_gpsDataModel.GPSData.horizontalAccuracy * 3.280839895 ).toFixed(0) + " ft.\n"
+					+ "Vertical Accuracy: " + (_gpsDataModel.GPSData.horizontalAccuracy * 3.280839895 ).toFixed(0) + " ft.\n"
+					+ "Speed: " + (_gpsDataModel.GPSData.speed * 2.2369).toString() + "\n";
+				
+				return latlonText;
+			}
+			
+			protected function stopGeolocation_clickHandler(event:MouseEvent):void
+			{
+				_gpsDataModel.dispatchEvent(new MasterMsgEvent(MasterMsgEvent.GEOLOCATION_CHANGE_REQUEST,"stop"));
+			}
+			
+			protected function geolocationHandler(event:MasterMsgEvent):void
+			{
+				if(event.data == false)
+				{
+					_UI_DICTIONARY["geolocation"] = false;
+					settingsViewController.UIController(_UI_DICTIONARY);
+				}
+			}
+			
+		]]>
+	</fx:Script>
+	<fx:Declarations>
+		<controller:SettingsViewController id="settingsViewController" view="{this}"  />
+	</fx:Declarations>
+	<s:actionContent>
+		<s:Group>
+			<s:layout>
+				<s:VerticalLayout horizontalAlign="center"/>
+			</s:layout>			
+			<s:Label id="gpsTextLabel" width="71" height="27" color="black" fontSize="16"
+					 fontStyle="normal" fontWeight="normal" paddingTop="8" text="GPS"
+					 textAlign="center" visible="false"/>			
+			<s:BusyIndicator id="busyIndicator" visible="false" symbolColor="red"/>
+		</s:Group>
+	</s:actionContent>
+	<s:navigationContent>
+		<s:Button id="navButton2" width="77" height="66" visible="false"/>
+	</s:navigationContent>	
+	<s:titleContent>
+		<s:Label id="settingsViewTitleLabel" width="100%" text="Settings" textAlign="center"
+				 verticalCenter="0"/>
+	</s:titleContent>	
+
+	<!-- Master container for custom content -->
+	<s:Group horizontalCenter="0"  >
+		<s:layout>
+			<s:VerticalLayout horizontalAlign="center" paddingTop="10" />
+		</s:layout>
+		<s:Button id="findLocationButton" width="100%" label="Start Tracking" fontSize="28" height="61"
+				  click="findLocation_clickHandler(event)"/>		
+		
+		<s:TextArea id="addressTextArea" width="100%" height="60" visible="false" 
+					skinClass="spark.skins.spark.TextAreaSkin" selectable="true" alpha="0.7" />
+		<s:TextArea id="GPSTextArea" width="100%" visible="false" height="219" alpha="0.7"
+					selectable="true" />		
+		
+		<s:Button id="shutdownGeolocationButton" width="100%" height="61" label="Stop Tracking"
+				  click="stopGeolocation_clickHandler(event)" fontSize="28"/>	
+		<s:Button id="deleteCookieButton" width="100%" height="61" label="Delete Location Cookie"
+				  click="deleteCookieButton_clickHandler(event)" fontSize="28"/>			
+
+	</s:Group>
+
+</s:View>

@@ -1,0 +1,872 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		xmlns:esri="http://www.esri.com/2008/ags"
+		xmlns:controller="controller.*"
+		backgroundColor="#C0C0C0" destructionPolicy="never" 
+		viewActivate="view1_viewActivateHandler(event)">
+
+	<fx:Style source="assets/MobileMap.css" />	
+	
+	<fx:Declarations>	
+		<esri:SimpleFillSymbol id="simpleFillSymbol1" color="0x00FFFF" alpha="0.5" style="solid" /> 
+		<esri:SimpleLineSymbol id="simpleLineSymbol1" style="solid" color="0xFF00FF" width="1" alpha="1"/> 
+	</fx:Declarations>		
+	
+	<fx:Script>
+		<![CDATA[
+			import com.esri.ags.Graphic;
+			import com.esri.ags.SpatialReference;
+			import com.esri.ags.events.ExtentEvent;
+			import com.esri.ags.events.LayerEvent;
+			import com.esri.ags.events.LocatorEvent;
+			import com.esri.ags.events.MapEvent;
+			import com.esri.ags.events.MapMouseEvent;
+			import com.esri.ags.geometry.Geometry;
+			import com.esri.ags.geometry.MapPoint;
+			import com.esri.ags.geometry.Polygon;
+			import com.esri.ags.geometry.Polyline;
+			import com.esri.ags.geometry.WebMercatorMapPoint;
+			import com.esri.ags.symbols.PictureMarkerSymbol;
+			import com.esri.ags.symbols.TextSymbol;
+			import com.esri.ags.tasks.Locator;
+			import com.esri.ags.tasks.supportClasses.AddressCandidate;
+			import com.esri.ags.tasks.supportClasses.DirectionsFeatureSet;
+			import com.esri.ags.utils.WebMercatorUtil;
+			
+			import controller.GeomUtil;
+			import controller.NetworkChangeController;
+			import controller.RouteController;
+			
+			import events.MasterMsgEvent;
+			
+			import flash.sensors.Geolocation;
+			
+			import model.GPSDataModel;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.effects.Move;
+			import mx.events.CloseEvent;
+			import mx.events.DragEvent;
+			import mx.events.EffectEvent;
+			import mx.events.FlexEvent;
+			import mx.managers.PopUpManager;
+			import mx.rpc.events.FaultEvent;
+			import mx.utils.ObjectProxy;
+			
+			import spark.components.Application;
+			import spark.components.Image;
+			import spark.components.TitleWindow;
+			import spark.components.ViewNavigator;
+			import spark.effects.Move;
+			import spark.effects.Resize;
+			import spark.effects.Scale;
+			import spark.events.ViewNavigatorEvent;
+			
+			private var _geoLocation:Geolocation;
+			private var _latlonArray:ArrayCollection;
+			private var _previousLocation:MapPoint;
+			private var _currentLocation:MapPoint;
+			private var _currentLocationLatLon:String;
+			private var _addressText:String;
+			private var _gpsDataModel:GPSDataModel;
+			private var _titlewindow:TitleWindow;
+			private var _firstLoad:Boolean;
+			private var _locator:Locator;
+			private var _useLocator:Boolean; //whether or not locator can be used based on speed		
+			private var _directionsFS:DirectionsFeatureSet;
+			private var _directionsFSVector:Vector.<Graphic>;
+			private var _segmentGraphic:Graphic;
+			private var _routeSegmentSymbol:SimpleLineSymbol;
+			private var _util:GeomUtil;
+			private var _mapMouseDown:Boolean = false;
+			private var _addressFieldHasFocus:Boolean = false;
+			private var _routingEnabled:Boolean = false;
+			private var _accuracyFeet:Number = -1;			
+			private const _SPEED_THRESHOLD:Number = 10; //mph
+			private const _DEFAULT_ZOOMLEVEL:Number = 1;	
+			private const _HORIZONTAL_ACCURACY_THRESHOLD:Number = 150; //feet
+			private const _LOCATOR_ENDPOINT:String = "http://tasks.arcgisonline.com/ArcGIS/rest/services/Locators/TA_Address_NA_10/GeocodeServer";	
+			
+			[Bindable]
+			public var _mapLayer:ArrayCollection;						
+			[Bindable]
+			[Embed('/assets/i_target.png')]
+			private var _currentLocationPictureMarkerClass:Class;
+			[Bindable]
+			private var _currentLocationPictureMarkerSymbol:PictureMarkerSymbol;			
+			[Bindable]
+			private var _currentLocationPictureMarkerGraphic:Graphic;			
+			[Bindable]
+			private var _textSymbol:TextSymbol;
+			[Bindable]
+			private var _textSymbolGraphic:Graphic;							
+			[Bindable]
+			private var _UI_DICTIONARY:Dictionary;			
+			
+			protected function view1_viewActivateHandler(event:ViewNavigatorEvent):void
+			{
+				_firstLoad = true; //flag to let app know it that this view has just been loaded. 		
+				
+				//Position mapViewVGroup1
+				const abHeight:Number = navigator.actionBar.height;
+				mapViewVGroup1.top = abHeight + 10;
+				
+				var iOS:String = mapViewcontroller.detectiOS();
+				if(iOS != null && _UI_DICTIONARY != null)
+				{
+					_UI_DICTIONARY["iOSType"] = iOS;	
+					mapViewcontroller.UIController(_UI_DICTIONARY); 
+				}
+				
+				//Verify the app has connectivity to the internet
+				if(_gpsDataModel == null && _titlewindow == null)
+				{					
+					_UI_DICTIONARY = new Dictionary();
+					_titlewindow = new TitleWindow();
+					_gpsDataModel = GPSDataModel.getInstance();
+					_gpsDataModel.addEventListener(MasterMsgEvent.NETWORK_STATUS,networkStatusChangeHandler);
+				}				
+
+			}
+			
+			/**
+			 * Do the following after the first map layer has been successfully added to the map.
+			 */
+			private function mapCreationCompleteHandler(event:MapEvent):void
+			{		
+				_routeSegmentSymbol = new SimpleLineSymbol("solid",0xFF0000,0.5,8);
+				_titlewindow = new TitleWindow();
+				createTextSymbolGraphic(); 
+				
+				_currentLocationPictureMarkerSymbol = new PictureMarkerSymbol(_currentLocationPictureMarkerClass);
+				var tempObj:Object = new Object();
+				tempObj.name = "currentLocationPictureMarkerSymbol";
+				_currentLocationPictureMarkerGraphic = new Graphic();
+				_currentLocationPictureMarkerGraphic.attributes = tempObj;
+				_currentLocationPictureMarkerGraphic.symbol = _currentLocationPictureMarkerSymbol;
+				_currentLocationPictureMarkerGraphic.addEventListener(MouseEvent.CLICK,function(event:MouseEvent):void{
+					drawAndCenter(_DEFAULT_ZOOMLEVEL);
+				});				
+				
+				_gpsDataModel = GPSDataModel.getInstance();
+				_gpsDataModel.addEventListener(MasterMsgEvent.GPS_CHANGE,gpsDataChangeHandler);
+				_gpsDataModel.addEventListener(MasterMsgEvent.GEOLOCATION,geolocationActivatedHandler);
+				_gpsDataModel.addEventListener(MasterMsgEvent.NETWORK_STATUS,networkStatusChangeHandler);
+				_gpsDataModel.addEventListener(MasterMsgEvent.ROUTETASK_COMPLETED,routeTaskCompletedHandler);			
+				_gpsDataModel.addEventListener(MasterMsgEvent.ROUTETASK_FAULT,routeTaskFaultHandler);			
+				_gpsDataModel.addEventListener(MasterMsgEvent.ROUTETEXTSEGMENT_CLICK,routeTextSegmentClickHandler);		
+				_gpsDataModel.addEventListener(MasterMsgEvent.ROUTE_DIRECTIONS_ENABLED,routeDirectionsEnabledHandler);
+				_previousLocation = _gpsDataModel.currentMapPoint;	
+				_gpsDataModel.graphicsLayer = routeLayer;
+				
+				_locator = new Locator(_LOCATOR_ENDPOINT);
+				_locator.concurrency = "last";
+				_locator.addEventListener(LocatorEvent.LOCATION_TO_ADDRESS_COMPLETE,locationCompleteHandler);
+				_locator.addEventListener(FaultEvent.FAULT,locationFaultHandler);	
+				
+				_UI_DICTIONARY = new Dictionary();
+				_UI_DICTIONARY["gpsActivated"] = true;				
+				mapViewcontroller.UIController(_UI_DICTIONARY);	
+				
+				_util = new GeomUtil(map);
+				map.extent = _gpsDataModel.extent;		
+				map.level = _util.setZoomLevel(16);
+				map.addEventListener(ExtentEvent.EXTENT_CHANGE,extentChangeHandler);
+				map.addEventListener(MapMouseEvent.MAP_CLICK,mapClickHandler);	
+				map.addEventListener(MapMouseEvent.MAP_MOUSE_DOWN,mapMouseDownHandler);
+				map.addEventListener(MouseEvent.MOUSE_OUT,mapMouseOutHandler);
+				baseGraphicsLayer.addEventListener(MouseEvent.CLICK,layerGraphicClickHandler);
+				routeLayer.addEventListener(MouseEvent.CLICK,layerGraphicClickHandler);
+
+				if(_gpsDataModel.mapLayersArrayCollection)
+				{
+					_mapLayer = _gpsDataModel.mapLayersArrayCollection;
+				}
+				else
+				{
+					_mapLayer = new ArrayCollection([true,false,false]);
+				}				
+				//Accuracy number comes back from Geolocation object in meters so convert to feet
+				if(_gpsDataModel.GPSData)_accuracyFeet = _gpsDataModel.GPSData.horizontalAccuracy * 3.280839895;
+				
+				if(_previousLocation != null)drawAndCenter(_DEFAULT_ZOOMLEVEL);
+			}		
+			
+			private function networkStatusChangeHandler(event:MasterMsgEvent):void
+			{
+				if(event.data == "Service.unavailable")
+				{
+					_UI_DICTIONARY["networkService"] = true;				
+					mapViewcontroller.UIController(_UI_DICTIONARY);  
+				}
+			}
+			
+			private function createTextSymbolGraphic():void
+			{
+				var tf:TextFormat = new TextFormat();
+				tf.size = 18;
+				tf.font = "Arial";
+				
+				_textSymbol = new TextSymbol();
+				_textSymbol.border = false;
+				_textSymbol.yoffset = 37;
+				_textSymbol.textFormat = tf;
+				_textSymbol.background = true;
+				_textSymbol.backgroundColor = 0xfffff;
+				_textSymbol.alpha = 0.75;
+				_textSymbol.placement = "middle";
+				
+				_textSymbolGraphic = new Graphic();
+				_textSymbolGraphic.symbol = _textSymbol;
+				_textSymbolGraphic.addEventListener(MouseEvent.CLICK,textSymbolClickHandler);		
+			}			
+
+			private function layerGraphicClickHandler(event:MouseEvent):void
+			{
+				var className:String = flash.utils.getQualifiedClassName( event.target );				
+				if(className == "com.esri.ags.symbols::CustomSprite")
+				{										
+					trace("You clicked on a CustomSprite");
+					map.level = _util.setZoomLevel(_DEFAULT_ZOOMLEVEL);					
+					map.centerAt(event.target.mapPoint);
+				}
+				
+				/*
+				//Use this if you want to highlight or show text for a route segment when a user clicks on it.
+				if(className == "com.esri.ags::Graphic" && event.target.attributes != null)
+				{					
+					var breakFlag:Boolean = false;
+					var i:Number = 1;	
+					var mp:MapPoint = map.toMapFromStage(event.stageX,event.stageY);
+					
+					for each(var graphic:Graphic in _directionsFS.features)
+					{	
+						if(breakFlag)break;
+						if(graphic.attributes.text == event.target.attributes.text) 
+						{
+							var segment:Graphic = _directionsFS.features[i];						
+							directionsTextArea.text = segment.attributes.text;
+							changeListDisplaySelectedItem(segment.attributes.text);
+							breakFlag = true;
+							break;							
+						}
+						i++;	
+					}
+				}
+				*/
+			}
+			
+			private function routeDirectionsEnabledHandler(event:MasterMsgEvent):void
+			{
+				if(event.data == false)
+				{
+					_routingEnabled = false;
+					directionsList.dataProvider = null;
+					_UI_DICTIONARY["directionsList"] = true;				
+					mapViewcontroller.UIController(_UI_DICTIONARY);		
+				}
+			}
+			
+			private function mapClickHandler(event:MapMouseEvent):void
+			{	
+				if(_gpsDataModel.routeDirectionsEnabled == true && _directionsFSVector != null)
+				{
+					var mp:MapPoint = map.toMapFromStage(event.stageX,event.stageY);
+					calculateClosestSegment(mp);
+				}
+			}
+			
+			private function mapMouseDownHandler(event:MapMouseEvent):void
+			{
+				_mapMouseDown = true; 
+			}
+			
+			//Prevent the map from recentering when the user is touching/moving the map
+			private function mapMouseOutHandler(event:MouseEvent):void
+			{				
+				_mapMouseDown = false; 			
+			}
+			
+			private function changeListDisplaySelectedItem(segment:String):void
+			{				
+				var i:int = 0;
+				var arrayList:ArrayList = directionsList.dataProvider as ArrayList;
+				for each(var item:String in arrayList.source)
+				{
+					i++;
+					if(item.search(segment) != -1 && i > 2)
+					{
+						directionsList.ensureIndexIsVisible(parseInt(segment));
+						directionsList.selectedItem = arrayList.getItemAt(i - 1);
+					}
+				}
+			}
+			
+			private function textSymbolClickHandler(event:MouseEvent):void
+			{
+				var atts:Object = new Object();
+				
+				if(event.currentTarget.attributes.address == true)
+				{					
+					atts.address = false;
+					
+					_textSymbol.text = _currentLocationLatLon;
+					_textSymbolGraphic.attributes = atts;					
+					_textSymbolGraphic.geometry = _currentLocation;
+				}
+				
+				else
+				{
+					atts.address = true;
+					
+					_textSymbol.text = _addressText;
+					_textSymbolGraphic.attributes = atts;										
+					_textSymbolGraphic.geometry = _currentLocation;
+				}
+			}
+			
+			/**
+			 * Handles certain tasks when the Geolocation API updates.
+			 * Internal parameters include settings for horizontal accuracy
+			 * and the speed at which the user is traveling.
+			 */
+			private function gpsDataChangeHandler(event:MasterMsgEvent):void
+			{
+				trace("GPS update event.");
+				
+				//currentMapPoint property is updated via the Event Bus in the MobileMap.mxml file
+				_currentLocation = new WebMercatorMapPoint(event.data.lon, event.data.lat);
+				
+				var lat:Number = parseFloat(event.data.lat);
+				var lon:Number = parseFloat(event.data.lon);
+				_currentLocationLatLon = lat.toFixed(4) + ", " + lon.toFixed(4);
+								
+				//Fires off a locationToAddress request. However, if the speed is over a 
+				//a certain amount then the return value will most likely be returned
+				//after the currentLocation has already been updated via the Geolocation API
+				//resulting in a lag time and inaccurate information.
+				if(_gpsDataModel.currentMapPoint != null && _gpsDataModel.GPSData.speed <= _SPEED_THRESHOLD)
+				{
+					_useLocator = true;
+					var mp:MapPoint = new MapPoint(event.data.lon, event.data.lat);
+					_locator.locationToAddress(mp,1000);
+				}
+				else
+				{
+					_useLocator = false;
+					trace("Unable to start Locator Task: gpsDataManager.currentMapPoint = null");
+				}				
+				
+				drawAndCenter(_DEFAULT_ZOOMLEVEL);
+								
+				//Accuracy number comes back from Geolocation object in meters 
+				_accuracyFeet = _gpsDataModel.GPSData.horizontalAccuracy * 3.280839895;
+				
+				//Check to see how accurate the current location is. Set a threshold for notifying
+				//the user that the devices GPS may be off and only cell triangulation is being used.
+				if(_accuracyFeet > _HORIZONTAL_ACCURACY_THRESHOLD)
+				{
+					trace("Accuracy is low");
+					messageBox.visible = true;
+					messageBox.text = "Location accuracy is " + _accuracyFeet.toFixed(0) +  " ft., check if GPS and WiFi are turned on.";
+				}
+				else
+				{
+					messageBox.visible = false;
+				}
+			}
+			
+			private function locationCompleteHandler(event:LocatorEvent):void
+			{
+				var candidate:AddressCandidate = event.addressCandidate;
+				
+				if (candidate && candidate.address && candidate.address.Address)
+				{
+					var address:Object = candidate.address;
+					trace("address " + address.Address);
+					
+					_addressText = address.Address + ", ";
+					
+					if (address.City && address.State)
+					{
+						_addressText += address.City + ", " + address.State;
+					}			
+					
+					if(_addressText != null || _addressText != "")
+					{
+						_gpsDataModel.streetAddress = _addressText;
+					}
+					else
+					{
+						_gpsDataModel.streetAddress = "n/a";
+					}
+					
+					var atts:Object = new Object();
+					atts.address = true;
+										
+					_textSymbol.text = _addressText;
+					_textSymbolGraphic.attributes = atts;
+					_textSymbolGraphic.geometry = _currentLocation;
+					_textSymbolGraphic.visible = true;
+					
+					if(baseGraphicsLayer.contains(_textSymbolGraphic) == false)
+					{
+						baseGraphicsLayer.add(_textSymbolGraphic);
+					}
+					
+					//If the user has focus on the address input field don't change the value
+					if(_addressFieldHasFocus == false)
+					{
+						fromTx.text = _addressText;
+					}
+				}
+			}
+			
+			private function locationFaultHandler(event:FaultEvent):void
+			{
+				trace(event.fault.faultString + "\n" + 
+					event.fault.faultDetail);
+			}
+			
+			private function geolocationActivatedHandler(event:MasterMsgEvent):void
+			{
+				if(event.data == true)
+				{
+					_gpsDataModel.gpsActivated = true;
+				}
+				else
+				{
+					_gpsDataModel.gpsActivated = false;
+				}
+				
+				_UI_DICTIONARY["geolocationActivated"] = true;				
+				mapViewcontroller.UIController(_UI_DICTIONARY);	
+				
+				_UI_DICTIONARY["gpsButtonLabel"] = true;
+				mapViewcontroller.UIController(_UI_DICTIONARY);
+			}
+			
+			/**
+			 * Draw pictureMarkerSymbol,center and zoom map.
+			 * @param zoomLevel Any number between 0 and 19. 0 is closest to the ground
+			 * and the smallest scale.
+			 */
+			private function drawAndCenter(zoomLevel:Number):void
+			{					
+
+				_currentLocationPictureMarkerGraphic.geometry  = _currentLocation;	
+				var atts:Object = new Object();
+				
+				if(baseGraphicsLayer.contains(_currentLocationPictureMarkerGraphic) == false)
+				{
+					baseGraphicsLayer.add(_currentLocationPictureMarkerGraphic);
+				}
+				
+				if(_useLocator == true)
+				{
+					atts.address = true;
+					
+					_textSymbolGraphic.visible = true;
+					_textSymbol.text = _gpsDataModel.streetAddress;
+					_textSymbolGraphic.attributes = atts;				
+					_textSymbolGraphic.geometry = _currentLocation;
+					if(baseGraphicsLayer.contains(_textSymbolGraphic) == false)
+					{
+						baseGraphicsLayer.add(_textSymbolGraphic);
+					}
+				}
+				else
+				{
+					_textSymbolGraphic.visible = false;
+				}
+				
+				var numberofLODS:Number = map.lods.length;
+				
+				//Only auto-zoom on first load. Otherwise, if user changes zoom level the map
+				//will re- zoom every time the Geolocation updates which is very annoying.
+				if(_firstLoad == true && zoomLevel >= 0 && (numberofLODS - map.level) >= zoomLevel)
+				{
+					var level:Number = _util.setZoomLevel(zoomLevel);
+					map.level = level;
+					_firstLoad = false;
+				}				
+				
+				if(_currentLocation != null && _mapMouseDown == false)
+				{
+					map.centerAt(_currentLocation);				
+				}
+				
+				if(_routingEnabled == true && _currentLocation != null)
+				{
+					calculateClosestSegment(_currentLocation);
+				}				
+			}
+			
+			protected function calculateClosestSegment(currentLocation:MapPoint):void
+			{
+				var i:Number = _util.calculateClosestRouteSegment(currentLocation,_directionsFSVector);
+				
+				if(i + 1 <= _directionsFSVector.length)
+				{
+					var segment:Graphic = _directionsFSVector[i+1];
+					directionsTextArea.text = segment.attributes.text;
+					changeListDisplaySelectedItem(segment.attributes.text);
+				}
+			}				
+						
+			private function extentChangeHandler(event:ExtentEvent):void
+			{
+				var dict:Dictionary = new Dictionary();
+				dict["extent"] = event.extent;
+				_gpsDataModel.dispatchEvent(new MasterMsgEvent(MasterMsgEvent.SHAREDOBJECT_CHANGE,dict));
+			}
+			
+			private function navButtonClickHandler(event:Event):void
+			{
+				_UI_DICTIONARY["mapViewGroup1Visible"] = true;				
+				mapViewcontroller.UIController(_UI_DICTIONARY);				
+			}
+			
+			private function shutdownButton_clickHandler(event:MouseEvent):void
+			{
+				_gpsDataModel.dispatchEvent(new MasterMsgEvent(MasterMsgEvent.GEOLOCATION_CHANGE_REQUEST,"shutdown"));			
+			}
+			
+			private function gpsButton_clickHandler():void
+			{				
+				if(_gpsDataModel && _gpsDataModel.gpsActivated == true)
+				{					
+					_gpsDataModel.dispatchEvent(new MasterMsgEvent(MasterMsgEvent.GEOLOCATION_CHANGE_REQUEST,"stop")); 
+				}
+					
+				else if(Geolocation.isSupported)
+				{
+					_gpsDataModel.dispatchEvent(new MasterMsgEvent(MasterMsgEvent.GEOLOCATION_CHANGE_REQUEST,"start"));					
+				}
+					
+				_UI_DICTIONARY["gpsButtonLabel"] = true;				
+				mapViewcontroller.UIController(_UI_DICTIONARY);	
+			}			
+			
+			private function mapSwitcher_clickHandler(event:Event):void
+			{
+				_UI_DICTIONARY["mapSwitcherLabelBasic"] = true;				
+				mapViewcontroller.UIController(_UI_DICTIONARY);
+				
+				var dict:Dictionary = new Dictionary();
+				dict["mapLayer"] = _mapLayer;
+				_gpsDataModel.dispatchEvent(new MasterMsgEvent(MasterMsgEvent.SHAREDOBJECT_CHANGE,dict));				
+				
+			}
+			
+			//********************************
+			//This section handles routing
+			//********************************
+			
+			//Close the button selector window when someone starts typing an address.
+			private function routeVGroupClickHandler(event:Event):void
+			{
+				//_UI_DICTIONARY["mapViewGroup1Visible"] = true;				
+				//controller1.UIController(_UI_DICTIONARY);		
+			}	
+			
+			private function routeTaskCompletedHandler(event:MasterMsgEvent):void
+			{
+				
+				_routingEnabled = true;
+				_directionsFS = event.data; //directionsFeatureSet
+				var i:int = 1;
+							
+				_gpsDataModel.routeDirectionsEnabled = true;				
+				
+				_UI_DICTIONARY["directionsBusyIndicator"] = false;				
+				mapViewcontroller.UIController(_UI_DICTIONARY);
+				
+				var arrayList:ArrayList = new ArrayList();
+
+				arrayList.addItem("Route length: " + _util.formatDistance(event.data.totalLength,"miles"));
+				arrayList.addItem("Total Drive Time: " + _util.formatTime(event.data.totalTime));	
+				
+				//IMPORTANT: The graphics in the featureset need to be polylines. Transfer the assets of
+				//the FeatureSet to a Vector, and use Vector.<Graphic> for high performance access of the FeatureSet.
+				//Reference: http://help.adobe.com/en_US/FlashPlatform/reference/actionscript/3/Vector.html
+				_directionsFSVector = new Vector.<Graphic>;
+				for each(var graphic:Graphic in _directionsFS.features)
+				{
+					_directionsFSVector.push(graphic);	
+				}
+				
+				//_gpsDataModel.directionsFeatureSetVector = _directionsFSVector;
+				
+				for each(var obj:Object in event.data.attributes)
+				{
+					arrayList.addItem(i + ". " + obj.text);
+					i++;
+				}
+								
+				directionsList.dataProvider = arrayList;
+				directionsTextArea.text = arrayList.source[2]; //Skip first two entries in the Array.
+				
+				_UI_DICTIONARY["directionsList"] = true;				
+				mapViewcontroller.UIController(_UI_DICTIONARY);				
+			}
+			
+			private function routeTaskFaultHandler(event:MasterMsgEvent):void
+			{
+				_UI_DICTIONARY["directionsBusyIndicator"] = false;				
+				mapViewcontroller.UIController(_UI_DICTIONARY);
+				
+				_UI_DICTIONARY["routeTaskFaultPopUpWarning"] = true;				
+				mapViewcontroller.UIController(_UI_DICTIONARY);
+			}
+			
+			private function routeButton_clickHandler(event:Event):void
+			{				
+				_UI_DICTIONARY["routeDirectionsContainerVisible"] = true;				
+				mapViewcontroller.UIController(_UI_DICTIONARY);
+				
+//				if(_gpsDataModel && _gpsDataModel.gpsActivated == false && Geolocation.isSupported)
+//				{					
+//					_gpsDataModel.dispatchEvent(new MasterMsgEvent(MasterMsgEvent.GEOLOCATION_CHANGE_REQUEST,"start"));					
+//				}						
+			}
+			
+			private function getDirections():void
+			{
+				routeLayer.clear();
+				directionsList.dataProvider = null;
+				_gpsDataModel.routeDirectionsEnabled = false; //only true if a valid result comes back
+				var rc:RouteController = new RouteController(map,toTx.text,fromTx.text,routeLayer,true);				
+				
+				_UI_DICTIONARY["directionsBusyIndicator"] = true;				
+				mapViewcontroller.UIController(_UI_DICTIONARY);
+			}
+			
+			//User selects a route segment in the text list
+			private function routeTextSegmentClickHandler(event:MasterMsgEvent):void
+			{
+				if(_directionsFSVector != null)
+				{
+					trace("parseint: " + (parseInt(event.data) - 1));
+					var segment:Graphic = _directionsFSVector[parseInt(event.data) - 1];
+					if(segment != null)
+					{
+						map.extent = segment.geometry.extent;	
+
+						if (!map.extent.contains(segment.geometry.extent))
+						{
+							map.level--; // make sure the whole extent is visible
+						}
+						
+						if (!_segmentGraphic)
+						{
+							_segmentGraphic = new Graphic(segment.geometry, _routeSegmentSymbol);
+							routeLayer.add(_segmentGraphic);
+						}
+						else
+						{
+							_segmentGraphic.geometry = segment.geometry;
+						}	
+					}
+				}
+			}
+			
+			//********************************
+			//End routing section
+			//********************************
+						
+			protected function closeButton2_clickHandler(event:MouseEvent):void
+			{
+				_UI_DICTIONARY["routeDirectionsContainerVisible"] = false;				
+				mapViewcontroller.UIController(_UI_DICTIONARY);
+			}		
+
+			protected function directionsList_clickHandler(event:MouseEvent):void
+			{
+				try
+				{
+					directionsTextArea.text = event.target.text;
+				}
+				catch(err:Error)
+				{
+					trace("directionsList_clickHandler: " + err.getStackTrace());
+				}
+			}
+			
+			/**
+			 * If the user clicks in the To or From address text fields then
+			 * set this property. The property can then be used to prevent
+			 * the application from automatically updating either of those
+			 * fields.
+			 */
+			protected function addressText_focusInHandler(event:FocusEvent):void
+			{
+				_addressFieldHasFocus = true;
+			}
+						
+			/**
+			 * If the user clicks in the To or From address text fields then
+			 * set this property. The property can then be used to prevent
+			 * the application from automatically updating either of those
+			 * fields.
+			 */
+			protected function addressText_focusOutHandler(event:FocusEvent):void
+			{
+				//_fromTxHasFocus = false;
+			}
+			
+			protected function stopDirectionsButton_clickHandler(event:MouseEvent):void
+			{
+				if(_gpsDataModel && _gpsDataModel.graphicsLayer != null && _gpsDataModel.graphicsLayer.numGraphics != 0)
+				{
+					var graphicsLayer:GraphicsLayer = _gpsDataModel.graphicsLayer;
+					graphicsLayer.clear();
+					_addressFieldHasFocus = false;
+					//_gpsDataModel.graphicsLayer = null;
+					_gpsDataModel.routeDirectionsEnabled = false;
+					_gpsDataModel.dispatchEvent(new MasterMsgEvent(MasterMsgEvent.ROUTE_DIRECTIONS_ENABLED,false));
+				}
+			}
+			
+			protected function routeDirectionsContainer_mouseDownHandler(event:MouseEvent):void
+			{
+				//Only allow dragging if user clicks on the parent container rather than the text fields.
+				var className:String = flash.utils.getQualifiedClassName( event.target );				
+				if(className == "spark.components::Group")routeDirectionsContainer.startDrag(false,null);				
+			}
+			
+			protected function routeDirectionsContainer_mouseUpHandler(event:MouseEvent):void
+			{
+				routeDirectionsContainer.stopDrag();				
+			}
+			
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<controller:MapViewController id="mapViewcontroller" view="{this}" />
+	</fx:Declarations>
+		
+	<s:states>
+		<s:State name="directionsListVisible" />
+		<s:State name="directionsListNotVisible" />
+	</s:states>
+	
+	<s:actionContent>
+		<s:Group id="gpsVGroup" visible="false">
+			<s:layout>
+				<s:VerticalLayout horizontalAlign="center"/>
+			</s:layout>				
+			<s:Label id="gpsTextLabel" width="71" height="27" color="black" fontSize="16"
+					 fontStyle="normal" fontWeight="normal" paddingTop="8" text="GPS"
+					 textAlign="center" />
+			<s:BusyIndicator id="busyIndicator" symbolColor="black"/>			
+		</s:Group>
+	</s:actionContent>
+	<s:navigationContent>
+		<s:Button id="navButton1" click="navButtonClickHandler(event)" icon="@Embed('/assets/arrow_up2.png')"/>
+	</s:navigationContent>
+	<s:titleContent>
+		<s:TextArea id="directionsTextArea" width="100%" includeInLayout="false"
+					verticalScrollPolicy="auto" verticalCenter="0" horizontalCenter="0" alpha="0.6"/>
+		<s:Label id="mapViewTitleLabel" text="GPS Tracker" horizontalCenter="0" verticalCenter="0" width="100%" textAlign="center" />
+	</s:titleContent>
+	
+	<!-- Map Control -->
+	<esri:Map id="map" openHandCursorVisible="false" zoomSliderVisible="false" wrapAround180="true" load="mapCreationCompleteHandler(event)">
+		<esri:ArcGISTiledMapServiceLayer url="http://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer"
+										 visible="{_mapLayer.getItemAt(0)}"/>			
+		<esri:ArcGISTiledMapServiceLayer url="http://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
+										 visible="{_mapLayer.getItemAt(1)}"/>		
+		<esri:ArcGISTiledMapServiceLayer url="http://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer"		 	
+										 visible="{_mapLayer.getItemAt(2)}"/>	
+		<esri:GraphicsLayer id='baseGraphicsLayer' />
+		<esri:GraphicsLayer id='routeLayer' />
+	</esri:Map>	
+
+	<s:Group id="mapViewVGroup1" width="187" height="283" left="10" 
+			   visible="true">
+		<s:layout>
+			<s:VerticalLayout horizontalAlign="left" verticalAlign="middle" />
+		</s:layout>
+		<s:Button id="gpsButton" width="100%"  label="Start Tracking" click="gpsButton_clickHandler()" />	
+		<s:Button id="mapSwitcher" width="100%" label="Streets" click="mapSwitcher_clickHandler(event)" />
+		<s:Button id="routeButton" width="100%" label="Route" click="routeButton_clickHandler(event)" />
+		<s:Button id="shutdownButton" label="Shutdown" width="100%" click="shutdownButton_clickHandler(event)"/>		
+	</s:Group>
+	
+	
+	<s:Group id="routeDirectionsContainer" visible="false" width="95%" bottom="75"
+			 maxWidth="500" horizontalCenter="0" contentBackgroundAlpha="0.8"
+			 mouseDown="routeDirectionsContainer_mouseDownHandler(event)"
+			 mouseUp="routeDirectionsContainer_mouseUpHandler(event)"
+			 mouseOut="routeDirectionsContainer_mouseUpHandler(event)">
+		<s:Rect left="0" right="0" top="0" bottom="0" radiusX="15">
+			<s:fill>
+				<s:SolidColor alpha="0.5" color="#D1CACA"/>
+			</s:fill>
+		</s:Rect>
+
+		<s:VGroup width="100%" contentBackgroundAlpha="0.5" paddingBottom="10" paddingLeft="10"
+				  paddingRight="10" paddingTop="45">
+			
+			<s:List id="directionsList" click="directionsList_clickHandler(event)" horizontalCenter="0" verticalCenter="0" 
+					itemRenderer="skins.DirectionsItemRenderer" 
+					includeInLayout="false"
+					maxHeight="300"
+					width="100%">
+				<s:layout>
+					<s:VerticalLayout gap="0" horizontalAlign="contentJustify" requestedRowCount="7" />
+				</s:layout>
+			</s:List>					
+			
+			<s:Group width="100%">
+				<s:layout>
+					<s:HorizontalLayout verticalAlign="middle" />
+				</s:layout>
+				<s:Label color="#000000" text="From" width="12%"/>
+				<s:TextInput id="fromTx" click="routeVGroupClickHandler(event)"
+							 skinClass="spark.skins.mobile.TextInputSkin"
+							 width="88%" selectable="true" 
+							 focusIn="addressText_focusInHandler(event)"
+							 focusOut="addressText_focusOutHandler(event)"
+							 text="380 New York St, Redlands, CA, 92373"
+							 toolTip="Enter a U.S. address as 'Street, City, State, Zip'"/>			
+			</s:Group>
+			<s:Group width="100%">
+				<s:layout>
+					<s:HorizontalLayout verticalAlign="middle" />
+				</s:layout>				
+				<s:Label color="#000000" text="To" width="12%"/>	
+				<s:TextInput id="toTx" click="routeVGroupClickHandler(event)"
+							 skinClass="spark.skins.mobile.TextInputSkin"
+							 width="88%" selectable="true"
+							 focusIn="addressText_focusInHandler(event)"
+							 focusOut="addressText_focusOutHandler(event)"							 
+							 text="345 Park Ave, San Jose, CA, 95110"
+							 toolTip="Enter a U.S. address as 'Street, City, State, Zip'"/>				
+			</s:Group>
+			<s:Group width="100%">
+				<s:layout>
+					<s:HorizontalLayout horizontalAlign="center" verticalAlign="middle" />
+				</s:layout>
+				<s:Button width="80%" id="getDirectionsButton" label="Get Directions" click="getDirections()" />
+				<s:Button width="20%" id="stopDirectionsButton" visible="true" height="{getDirectionsButton.height}"
+						  click="stopDirectionsButton_clickHandler(event)" icon="@Embed('/assets/i_stop_small.png')"/>
+				<s:BusyIndicator id="busyIndicator3" visible="false" 
+								 includeInLayout="false" symbolColor="red"/>	
+			</s:Group>
+		</s:VGroup>	
+		<!-- NOTE: Draw this button last so that it shows up on top -->
+		<s:Image id="closeButton2" right="2" top="2" width="40" height="40" 
+				 source="@Embed('/assets/edit_cancel.png')" click="closeButton2_clickHandler(event)"/>	
+	</s:Group>
+
+	<s:TextArea id="messageBox" width="95%" bottom="5" height="70" alpha="0.8" contentBackgroundColor="#FFFF00"
+				selectable="false" verticalScrollPolicy="auto" textAlign="left" horizontalCenter="0" visible="false"
+				skinClass="spark.skins.spark.TextAreaSkin"/>
+	
+</s:View>

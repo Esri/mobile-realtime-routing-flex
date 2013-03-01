@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+////////////////////////////////////////////////////////////////////////////////
+//
+//  ESRI, Inc
+//  Copyright 2012 ESRI, Inc
+//  All Rights Reserved.
+//
+//  NOTICE: ESRI permits you to use, modify, and distribute this file
+//  in accordance with the terms of the license agreement accompanying it.
+//  Reference: http://www.esri.com/legal/index.html
+//
+////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////// 
+//Flex/AIR Mobile location and real-time routing
+//Version: 0.2
+//Current Release Date: August 2012
+//ArcGIS API for Flex: v3.0
+//Adobe Flex: v4.6
+////////////////////////////////////////////////////////////////////////////////
+-->
+<s:TabbedViewNavigatorApplication xmlns:fx="http://ns.adobe.com/mxml/2009" 
+								  xmlns:s="library://ns.adobe.com/flex/spark" 
+								  xmlns:esri="http://www.esri.com/2008/ags"
+								  splashScreenImage="@Embed('assets/splashscreen.png')"
+								  backgroundColor="#000000" 
+								  splashScreenMinimumDisplayTime="1500" 
+								  splashScreenScaleMode="letterbox"
+								  persistNavigatorState="true"
+								  applicationComplete="mobilemap_applicationCompleteHandler(event)"
+								  creationComplete="creationCompleteHandler(event)">
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+
+		global
+		{
+			font-size: 20;
+			color: #100202;
+			chrome-color: #E4F11C;
+			content-background-alpha: 1.0;
+		}
+				
+		s|ActionBar
+		{
+			chromeColor: #C0C0C0;
+			titleAlign: center;			
+		}
+	
+	</fx:Style>
+
+	<fx:Style source="assets/MobileMap.css" />	
+	
+	<fx:Declarations>
+		<s:Move3D id="moveEffectLeft" duration="300" xFrom="400" xTo="0"/>
+		<s:Move3D id="moveEffectUp" duration="300" yFrom="400" yTo="0"/>
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[			
+			import controller.GeolocationController;
+			import controller.NetworkChangeController;
+			import controller.SharedObjectController;
+			
+			import mx.events.FlexEvent;
+			
+			import spark.events.IndexChangeEvent;
+			
+			protected function creationCompleteHandler(event:FlexEvent):void
+			{	
+				trace("Capabilities: " + Capabilities.os);
+				
+				//Make sure we are on a mobile device and then
+				//keep the application awake so it doesn't go to sleep and close the screen.				
+				if(Capabilities.cpuArchitecture == "ARM")
+				{					
+					NativeApplication.nativeApplication.systemIdleMode = SystemIdleMode.KEEP_AWAKE;					
+				}
+				
+				var geoLocation:GeolocationController = new GeolocationController();
+				var shared:SharedObjectController = new SharedObjectController();
+				var network:NetworkChangeController = new NetworkChangeController(true);
+			}
+			
+			protected function mobilemap_applicationCompleteHandler(event:FlexEvent):void
+			{
+				this.tabbedNavigator.addEventListener(IndexChangeEvent.CHANGE,onChangeHandler);				
+			}
+			
+			protected function onChangeHandler(event:IndexChangeEvent):void
+			{
+				if(event.newIndex == 0)
+				{
+					moveEffectLeft.play([view1.activeView]);
+				}
+				else if(event.newIndex == 1)
+				{
+					moveEffectUp.play([view2.activeView]);
+				}
+			}
+			
+		]]>
+	</fx:Script>
+
+	<s:ViewNavigator id="view1" width="100%" height="100%" firstView="views.MapView" icon="@Embed('assets/i_globe.png')"/>	
+	<s:ViewNavigator id="view2" width="100%" height="100%" firstView="views.SettingsView" icon="@Embed('assets/i_options.png')" />
+	
+</s:TabbedViewNavigatorApplication>
