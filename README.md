@@ -1,6 +1,4 @@
-flex-mobile-routing
-<<<<<<< HEAD
-==================
+# Flex Mobile Real-time Routing App
 
 This is a prototype mapping application that demonstrates using real-time routing. 
 
@@ -54,8 +52,3 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 A copy of the license is available in the repository's [license.txt]( https://raw.github.com/Esri/android-gps-test-tool/master/license.txt) file.
-=======
-===================
-
-Prototype app showing how to build a real-time routing app using Flex Mobile
->>>>>>> 6b66169c59801c3d6e5580ab996e2caf371dd945
