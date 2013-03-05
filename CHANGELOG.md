@@ -1,5 +1,8 @@
 # Flex Mobile Routing app - Changelog
 
+## v0.3.1 (March 2013)
+- Many UX changes including media queries.
+
 ## v0.3.0 (Feb 2013)
 - Many UX optimizations
 

@@ -14,26 +14,18 @@
 	<fx:Script>
 		<![CDATA[
 			import com.esri.ags.events.LocatorEvent;
-			import com.esri.ags.layers.GraphicsLayer;
 			import com.esri.ags.tasks.Locator;
 			import com.esri.ags.tasks.supportClasses.AddressCandidate;
 			
 			import controller.SettingsViewController;
 			
 			import events.MasterMsgEvent;
-			
-			import flash.sensors.Geolocation;
-			
+
 			import model.GPSDataModel;
 			
-			import mx.events.CloseEvent;
 			import mx.events.FlexEvent;
-			import mx.events.StateChangeEvent;
-			import mx.managers.PopUpManager;
 			import mx.rpc.events.FaultEvent;
 			
-			import spark.components.Application;
-			import spark.components.ViewNavigator;
 			import spark.effects.Resize;
 			import spark.events.ViewNavigatorEvent;			
 
@@ -53,11 +45,6 @@
 			{
 				trace("Settings View activated");
 				loadingHandler();
-				if(_gpsDataModel && _gpsDataModel.networkStatus == false)
-				{
-					_UI_DICTIONARY["networkService"] = true;				
-					settingsViewController.UIController(_UI_DICTIONARY);
-				}
 			}
 			
 			protected function settingsViewDeactivateHandler(event:ViewNavigatorEvent):void
@@ -80,6 +67,9 @@
 			private function loadingHandler():void
 			{
 				_UI_DICTIONARY = new Dictionary();
+				
+				_gpsDataModel = GPSDataModel.getInstance();
+				_gpsDataModel.addEventListener(MasterMsgEvent.NETWORK_STATUS,networkStatusChangeHandler);
 
 				_locator = new Locator(_LOCATOR_ENDPOINT);
 				_locator.concurrency = "last";
@@ -247,6 +237,15 @@
 				addressTextArea.text = "Can't get address: " + event.fault.name + "\n" + 
 					event.fault.faultCode + "\n" +
 					event.fault.faultDetail;
+			}
+			
+			private function networkStatusChangeHandler(event:MasterMsgEvent):void
+			{
+				if(event.data == "Service.unavailable")
+				{
+					_UI_DICTIONARY["networkService"] = false;				
+					settingsViewController.UIController(_UI_DICTIONARY);  
+				}
 			}
 			
 			private function createGPSDataString():String

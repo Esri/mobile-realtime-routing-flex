@@ -92,9 +92,9 @@ package controller
 				delete dict["startViewSettings"];	
 			}
 			
-			if(dict["networkService"])
+			if(dict["networkService"] == false)
 			{
-				populateTitleWindow("Service connection lost. Restart app!");
+				populateTitleWindow("Network connection lost.");
 				
 				delete dict["networkService"];
 			}			

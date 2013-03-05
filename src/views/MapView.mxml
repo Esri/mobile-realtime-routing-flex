@@ -4,6 +4,7 @@
 		xmlns:esri="http://www.esri.com/2008/ags"
 		xmlns:controller="controller.*"
 		backgroundColor="#C0C0C0" destructionPolicy="never" 
+		initialize="creationCompleteHandler(event)"
 		viewActivate="view1_viewActivateHandler(event)">
 
 	<fx:Style source="assets/MobileMap.css" />	
@@ -16,53 +17,35 @@
 	<fx:Script>
 		<![CDATA[
 			import com.esri.ags.Graphic;
-			import com.esri.ags.SpatialReference;
 			import com.esri.ags.events.ExtentEvent;
-			import com.esri.ags.events.LayerEvent;
 			import com.esri.ags.events.LocatorEvent;
 			import com.esri.ags.events.MapEvent;
 			import com.esri.ags.events.MapMouseEvent;
-			import com.esri.ags.geometry.Geometry;
 			import com.esri.ags.geometry.MapPoint;
-			import com.esri.ags.geometry.Polygon;
-			import com.esri.ags.geometry.Polyline;
 			import com.esri.ags.geometry.WebMercatorMapPoint;
 			import com.esri.ags.symbols.PictureMarkerSymbol;
 			import com.esri.ags.symbols.TextSymbol;
 			import com.esri.ags.tasks.Locator;
 			import com.esri.ags.tasks.supportClasses.AddressCandidate;
 			import com.esri.ags.tasks.supportClasses.DirectionsFeatureSet;
-			import com.esri.ags.utils.WebMercatorUtil;
+			
+			import flash.sensors.Geolocation;
+			
+			import mx.collections.ArrayCollection;
+			import mx.collections.ArrayList;
+			import mx.events.FlexEvent;
+			import mx.rpc.events.FaultEvent;
+			
+			import spark.components.Image;
+			import spark.components.TitleWindow;
+			import spark.events.ViewNavigatorEvent;
 			
 			import controller.GeomUtil;
-			import controller.NetworkChangeController;
 			import controller.RouteController;
 			
 			import events.MasterMsgEvent;
 			
-			import flash.sensors.Geolocation;
-			
 			import model.GPSDataModel;
-			
-			import mx.collections.ArrayCollection;
-			import mx.collections.ArrayList;
-			import mx.effects.Move;
-			import mx.events.CloseEvent;
-			import mx.events.DragEvent;
-			import mx.events.EffectEvent;
-			import mx.events.FlexEvent;
-			import mx.managers.PopUpManager;
-			import mx.rpc.events.FaultEvent;
-			import mx.utils.ObjectProxy;
-			
-			import spark.components.Application;
-			import spark.components.Image;
-			import spark.components.TitleWindow;
-			import spark.components.ViewNavigator;
-			import spark.effects.Move;
-			import spark.effects.Resize;
-			import spark.effects.Scale;
-			import spark.events.ViewNavigatorEvent;
 			
 			private var _geoLocation:Geolocation;
 			private var _latlonArray:ArrayCollection;
@@ -105,9 +88,14 @@
 			[Bindable]
 			private var _UI_DICTIONARY:Dictionary;			
 			
+			private function creationCompleteHandler(event:FlexEvent):void
+			{
+				_mapLayer = new ArrayCollection([true,false,false]);
+			}
+			
 			protected function view1_viewActivateHandler(event:ViewNavigatorEvent):void
 			{
-				_firstLoad = true; //flag to let app know it that this view has just been loaded. 		
+				_firstLoad = true; //flag to let app know it that this view has just been loaded. 	
 				
 				//Position mapViewVGroup1
 				const abHeight:Number = navigator.actionBar.height;
@@ -180,14 +168,8 @@
 				baseGraphicsLayer.addEventListener(MouseEvent.CLICK,layerGraphicClickHandler);
 				routeLayer.addEventListener(MouseEvent.CLICK,layerGraphicClickHandler);
 
-				if(_gpsDataModel.mapLayersArrayCollection)
-				{
-					_mapLayer = _gpsDataModel.mapLayersArrayCollection;
-				}
-				else
-				{
-					_mapLayer = new ArrayCollection([true,false,false]);
-				}				
+				var tms:ArcGISTiledMapServiceLayer = streetsLayer; 
+//				_mapLayer = new ArrayCollection([true,false,false]);
 				//Accuracy number comes back from Geolocation object in meters so convert to feet
 				if(_gpsDataModel.GPSData)_accuracyFeet = _gpsDataModel.GPSData.horizontalAccuracy * 3.280839895;
 				
@@ -777,7 +759,7 @@
 	
 	<!-- Map Control -->
 	<esri:Map id="map" openHandCursorVisible="false" zoomSliderVisible="false" wrapAround180="true" load="mapCreationCompleteHandler(event)">
-		<esri:ArcGISTiledMapServiceLayer url="http://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer"
+		<esri:ArcGISTiledMapServiceLayer id="streetsLayer" url="http://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer"
 										 visible="{_mapLayer.getItemAt(0)}"/>			
 		<esri:ArcGISTiledMapServiceLayer url="http://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
 										 visible="{_mapLayer.getItemAt(1)}"/>		
@@ -792,15 +774,15 @@
 		<s:layout>
 			<s:VerticalLayout horizontalAlign="left" verticalAlign="middle" />
 		</s:layout>
-		<s:Button id="gpsButton" width="100%"  label="Start Tracking" click="gpsButton_clickHandler()" />	
+		<s:Button id="gpsButton" width="100%"  label="GPS Off" click="gpsButton_clickHandler()" />	
 		<s:Button id="mapSwitcher" width="100%" label="Streets" click="mapSwitcher_clickHandler(event)" />
-		<s:Button id="routeButton" width="100%" label="Route" click="routeButton_clickHandler(event)" />
+		<s:Button id="routeButton" width="100%" label="Directions" click="routeButton_clickHandler(event)" />
 		<s:Button id="shutdownButton" label="Shutdown" width="100%" click="shutdownButton_clickHandler(event)"/>		
 	</s:Group>
 	
 	
 	<s:Group id="routeDirectionsContainer" visible="false" width="95%" bottom="75"
-			 maxWidth="500" horizontalCenter="0" contentBackgroundAlpha="0.8"
+			 horizontalCenter="0" contentBackgroundAlpha="0.8"
 			 mouseDown="routeDirectionsContainer_mouseDownHandler(event)"
 			 mouseUp="routeDirectionsContainer_mouseUpHandler(event)"
 			 mouseOut="routeDirectionsContainer_mouseUpHandler(event)">
@@ -827,7 +809,7 @@
 				<s:layout>
 					<s:HorizontalLayout verticalAlign="middle" />
 				</s:layout>
-				<s:Label color="#000000" text="From" width="12%"/>
+				<s:Label id="fromLabel" color="#000000" text="From" width="12%"/>
 				<s:TextInput id="fromTx" click="routeVGroupClickHandler(event)"
 							 skinClass="spark.skins.mobile.TextInputSkin"
 							 width="88%" selectable="true" 
@@ -840,7 +822,7 @@
 				<s:layout>
 					<s:HorizontalLayout verticalAlign="middle" />
 				</s:layout>				
-				<s:Label color="#000000" text="To" width="12%"/>	
+				<s:Label id="toLabel" color="#000000" text="To" width="12%"/>	
 				<s:TextInput id="toTx" click="routeVGroupClickHandler(event)"
 							 skinClass="spark.skins.mobile.TextInputSkin"
 							 width="88%" selectable="true"

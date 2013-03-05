@@ -1,8 +1,6 @@
 package controller
 {
-	import flash.desktop.NativeApplication;
 	import flash.display.DisplayObject;
-	import flash.display.NativeWindow;
 	import flash.events.MouseEvent;
 	import flash.sensors.Geolocation;
 	import flash.system.Capabilities;
@@ -11,12 +9,10 @@ package controller
 	import model.GPSDataModel;
 	
 	import mx.collections.ArrayCollection;
-	import mx.core.UIComponent;
 	import mx.effects.Fade;
 	import mx.events.EffectEvent;
 	import mx.managers.PopUpManager;
 	
-	import spark.components.Application;
 	import spark.components.TitleWindow;
 	import spark.effects.Scale;
 	
@@ -121,12 +117,12 @@ package controller
 			{
 				if(_gpsDataModel.gpsActivated == false)
 				{
-					view.gpsButton.label = "Start Tracking";
+					view.gpsButton.label = "GPS Off";
 					view.gpsVGroup.visible = false;
 				}
 				else
 				{
-					view.gpsButton.label = "Stop Tracking";
+					view.gpsButton.label = "GPS On";
 					view.gpsVGroup.visible = true;
 				}
 				
@@ -156,7 +152,7 @@ package controller
 			
 			if(dict["networkService"])
 			{
-				populateTitleWindow("Service connection lost. Restart app!");
+				populateTitleWindow("Network connection lost.");
 				
 				delete dict["networkService"];
 			}
@@ -170,12 +166,12 @@ package controller
 				
 				if(_gpsDataModel && _gpsDataModel.gpsActivated == true)
 				{											
-					view.gpsButton.label = "Stop Tracking"; 
+					view.gpsButton.label = "GPS On"; 
 				}
 					
 				else if(_gpsDataModel && _gpsDataModel.gpsActivated == false)
 				{						
-					view.gpsButton.label = "Start Tracking";					
+					view.gpsButton.label = "GPS Off";					
 				}	
 				
 				delete dict["gpsButtonLabel"];					

@@ -18,33 +18,23 @@
 {
 	color: #000000;
 	fontWeight: normal;
-	fontSize: 30;
+	fontSize: 24;
 	fontFamily: "Comic Sans MS";	
 }	
 
-#mapViewTitleWindow
+#settingsViewTitleLabel
 {
+	color: #000000;
+	fontWeight: normal;
 	fontSize: 24;
+	fontFamily: "Comic Sans MS";	
 }
+
 
 #directionsTextArea
 {
 	fontSize: 22; 
 	fontWeight: bold;
-}
-
-/* SettingsView  */
-#settingsViewTitleLabel
-{
-	color: #000000;
-	fontWeight: normal;
-	fontSize: 30;
-	fontFamily: "Comic Sans MS";	
-}
-
-#shutdownGeolocationButton
-{
-	chromeColor: #FF0000;
 }
 
 /* Alert messages title window */
@@ -65,10 +55,170 @@
 	fontWeight: bold;
 }
 
-s|TabbedViewNavigator #tabBar
+#gpsButton
 {
-	chromeColor: #C0C0C0;
-	color: 	#C0C0C0;
-	fontFamily: "Comic Sans MS";
-	fontSize: 24;		
+	fontSize: 20;
+}
+
+#mapSwitcher
+{
+	fontSize: 20;
+}
+
+#routeButton
+{
+	fontSize: 20;
+}
+
+#shutdownButton
+{
+	fontSize: 20;
+}
+
+#getDirectionsButton
+{
+	fontSize: 20;
+}
+
+#fromLabel
+{
+	fontSize: 18;
+}
+
+#toLabel
+{
+	fontSize: 18;
+}
+
+#fromTx{
+	fontSize: 18;
+}
+
+#toTx
+{
+	fontSize: 18;
+}
+
+/* Media Queries */
+
+@media (application-dpi: 240)
+{
+	#mapViewTitleLabel
+	{
+		fontSize: 28;
+	}
+	#settingsViewTitleLabel
+	{
+		fontSize: 28;
+	}	
+	/* Alert messages title window */
+	#settingsViewTitleWindow
+	{
+		fontSize: 28;
+	}	
+	#directionsTextArea
+	{
+		fontSize: 24; 
+		fontWeight: bold;
+	}
+	#gpsButton
+	{
+		fontSize: 22;
+	}
+	#mapSwitcher
+	{
+		fontSize: 22;
+	}
+	#routeButton
+	{
+		fontSize: 22;
+	}
+	#shutdownButton
+	{
+		fontSize: 22;
+	}
+	#getDirectionsButton
+	{
+		fontSize: 22;
+	}
+	#fromLabel
+	{
+		fontSize: 22;
+	}
+	#toLabel
+	{
+		fontSize: 22;
+	}
+	#fromTx
+	{
+		fontSize: 22;
+	}	
+	#toTx
+	{
+		fontSize: 22;
+	}
+}
+@media (application-dpi: 320)
+{
+	#mapViewTitleLabel
+	{
+		fontSize: 36;
+	}
+	#settingsViewTitleLabel
+	{
+		fontSize: 36;
+	}
+	/* Alert messages title window */
+	#settingsViewTitleWindow
+	{
+		fontSize: 32;
+	}
+	#directionsTextArea
+	{
+		fontSize: 26; 
+		fontWeight: bold;
+	}
+	#gpsButton
+	{
+		fontSize: 24;
+	}
+	#mapSwitcher
+	{
+		fontSize: 24;
+	}
+	#routeButton
+	{
+		fontSize: 24;
+	}
+	#shutdownButton
+	{
+		fontSize: 24;
+	}
+	#getDirectionsButton
+	{
+		fontSize: 24;
+	}
+	#fromLabel
+	{
+		fontSize: 24;
+		fontWeight: bold;
+	}
+	#toLabel
+	{
+		fontSize: 24;
+		fontWeight: bold;
+	}
+	#fromTx
+	{
+		fontSize: 24;
+	}	
+	#toTx
+	{
+		fontSize: 24;
+	}
+}
+
+#shutdownGeolocationButton
+{
+	chromeColor: #FF0000;
 }
