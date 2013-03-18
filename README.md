@@ -12,11 +12,13 @@ Main View:
 * Converts latitude/longitude locations to address
 * Calculates and displays textual driving directions.
 * Displays current location on map
+* Click on textual route info to zoom map
 * Draws the route on map
 
 ## Requirements (IMPORTANT)
 
 * Apache Flex 4.6 or greater
+* Adobe Integrated Runtime (AIR) v3.6 or greater
 * Mapping Library - Installation instructions here: [ArcGIS API for Flex](http://resources.arcgis.com/en/communities/flex-api/)
 * Experience with Flex/ActionScript software development
 

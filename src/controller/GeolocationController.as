@@ -1,33 +1,23 @@
 package controller
 {
-	import air.net.ServiceMonitor;
-	
-	import com.esri.ags.Map;
-	import com.esri.ags.geometry.Extent;
 	import com.esri.ags.geometry.MapPoint;
-	import com.esri.ags.geometry.Polygon;
 	import com.esri.ags.geometry.WebMercatorMapPoint;
 	import com.esri.ags.utils.WebMercatorUtil;
 	
-	import events.MasterMsgEvent;
-	
 	import flash.desktop.NativeApplication;
-	import flash.events.Event;
 	import flash.events.EventDispatcher;
 	import flash.events.GeolocationEvent;
 	import flash.events.StatusEvent;
 	import flash.events.TimerEvent;
-	import flash.net.InterfaceAddress;
 	import flash.net.SharedObject;
 	import flash.sensors.Geolocation;
 	import flash.utils.Dictionary;
 	import flash.utils.Timer;
-	import flash.utils.getQualifiedClassName;
+	
+	import events.MasterMsgEvent;
 	
 	import model.GPSDataModel;
 	import model.GPSLocation;
-	
-	import mx.collections.ArrayCollection;
 
 	/**
 	 * This class handles writing to both the local SharedObject and the singleton GPSDataController

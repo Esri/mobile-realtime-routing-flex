@@ -4,7 +4,7 @@
 		xmlns:esri="http://www.esri.com/2008/ags"
 		xmlns:controller="controller.*"
 		backgroundColor="#C0C0C0" destructionPolicy="never" 
-		initialize="creationCompleteHandler(event)"
+		initialize="intializeCompleteHandler(event)" 
 		viewActivate="view1_viewActivateHandler(event)">
 
 	<fx:Style source="assets/MobileMap.css" />	
@@ -88,7 +88,7 @@
 			[Bindable]
 			private var _UI_DICTIONARY:Dictionary;			
 			
-			private function creationCompleteHandler(event:FlexEvent):void
+			private function intializeCompleteHandler(event:FlexEvent):void
 			{
 				_mapLayer = new ArrayCollection([true,false,false]);
 			}
@@ -99,7 +99,7 @@
 				
 				//Position mapViewVGroup1
 				const abHeight:Number = navigator.actionBar.height;
-				mapViewVGroup1.top = abHeight + 10;
+				mapViewVGroup1.top = abHeight + 10; 
 				
 				var iOS:String = mapViewcontroller.detectiOS();
 				if(iOS != null && _UI_DICTIONARY != null)

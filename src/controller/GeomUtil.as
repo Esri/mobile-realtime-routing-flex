@@ -2,14 +2,9 @@ package controller
 {
 	import com.esri.ags.Graphic;
 	import com.esri.ags.Map;
-	import com.esri.ags.SpatialReference;
 	import com.esri.ags.geometry.Geometry;
 	import com.esri.ags.geometry.MapPoint;
-	import com.esri.ags.geometry.Polygon;
-	import com.esri.ags.tasks.supportClasses.DirectionsFeatureSet;
 	import com.esri.ags.utils.WebMercatorUtil;
-	
-	import flash.system.Capabilities;
 	
 	/**
 	 * Provides misc functionality.
