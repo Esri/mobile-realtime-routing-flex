@@ -4,7 +4,7 @@ This is a prototype mapping application that demonstrates using real-time routin
 
 Main View:
 
-![App](https://raw.github.com/andygup/flex-mobile-routing/master/flex_mobilerouting_main_view.png)
+![App](https://raw.github.com/Esri/mobile-realtime-routing-flex/master/flex_mobilerouting_main_view.png)
 
 ## Features
 * Real-time Mapping and GPS.
